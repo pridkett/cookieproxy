@@ -80,12 +80,6 @@ func cookieService() {
 			return
 		}
 
-		defer func() {
-			if err = f.Close(); err != nil {
-				log.Fatal(err)
-			}
-		}()
-
 		// FIXME: there is a small chance of a race condition here
 		waitgroup.Add(1)
 		cookies = nil
@@ -116,6 +110,9 @@ func cookieService() {
 		if err != nil {
 			log.Fatal(err)
 		}
+
+		f.Close()
+
 		time.Sleep(time.Duration(120) * time.Second)
 	}
 }
