@@ -30,31 +30,34 @@ import (
 	"time"
 )
 
-var cookieFile string
 var cookies []*http.Cookie
 
 var waitgroup sync.WaitGroup
 
 func main() {
 
-	cookieFlag := flag.String("cookiejar", "", "cookiejar to read from")
+	cookieFile := flag.String("cookiejar", "", "cookiejar to read from")
 	proxyPort := flag.String("port", "8675", "port to listen on")
 	proxyHost := flag.String("host", "", "host IP to listen on")
+	cookieRefresh := flag.String("refresh", "120", "number of seconds to wait between cookie updates")
 
 	flag.Parse()
-	cookieFile = *cookieFlag
 
-	log.Println("Cookie File: ", cookieFile)
+	log.Println("Cookie File: ", *cookieFile)
 	log.Println("Port: ", *proxyPort)
 	log.Println("Proxy Host: ", *proxyHost)
 
-	go cookieService()
+	cookieRefreshSeconds, err := strconv.ParseInt(*cookieRefresh, 10, 32)
+	if err != nil {
+		panic(err)
+	}
+	go cookieService(*cookieFile, int(cookieRefreshSeconds))
 
 	http.HandleFunc("/", hello)
 	http.HandleFunc("/p/", proxy)
 	bind := fmt.Sprintf("%s:%s", *proxyHost, *proxyPort)
 	log.Println("CookieProxy is listening on: ", bind)
-	err := http.ListenAndServe(bind, nil)
+	err = http.ListenAndServe(bind, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -67,7 +70,7 @@ func boolCheck(s string) bool {
 	return true
 }
 
-func cookieService() {
+func cookieService(cookieFile string, refresh int) {
 	/* periodically read the cookie file and update the local cookies */
 	if cookieFile == "" {
 		return
@@ -113,7 +116,7 @@ func cookieService() {
 
 		f.Close()
 
-		time.Sleep(time.Duration(120) * time.Second)
+		time.Sleep(time.Duration(refresh) * time.Second)
 	}
 }
 
