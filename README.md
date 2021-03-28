@@ -22,6 +22,20 @@ You'll see that CookieProxy has started on port 8675 and is ready to proxy reque
 curl http://localhost:8675/p/?target=http://foo.com/bar.png
 ```
 
+### Advanced Usage
+
+I recently added support for querying a host to grab the cookies. This is particularly useful for my main use case of acting as an authenticated proxy to a Tesla Powerwall. When using it in this way you don't need to specify the `-cookiejar` argument, but instead pass a JSON object as a string to the `-request` argument.
+
+```bash
+./cookieproxy -request '{"url": "https://powerwall/api/login/Basic", "headers": {"Content-Type": "application/json"}, "body": "{\\"username\\":\\"customer\\",\\"password\\":\\"YOUR_POWERWALL_PASSWORD\\",\\"force_sm_off\\":false}", "method": "POST"}'
+```
+
+Then you can easily validate it with the following command:
+
+```bash
+curl "http://localhost:8675/p/?target=https://powerwall/api/meters/aggregates"
+```
+
 ## License
 
 Copyright © 2021 Patrick Wagstrom

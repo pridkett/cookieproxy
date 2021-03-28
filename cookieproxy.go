@@ -14,7 +14,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -34,24 +36,41 @@ var cookies []*http.Cookie
 
 var waitgroup sync.WaitGroup
 
+type QueryConfig struct {
+	Headers  map[string]string
+	Username string
+	Password string
+	Body     string
+	Url      string
+	Method   string
+}
+
 func main() {
 
 	cookieFile := flag.String("cookiejar", "", "cookiejar to read from")
 	proxyPort := flag.String("port", "8675", "port to listen on")
 	proxyHost := flag.String("host", "", "host IP to listen on")
 	cookieRefresh := flag.String("refresh", "120", "number of seconds to wait between cookie updates")
-
+	cookieRequest := flag.String("request", "", "JSON blob describing the string to use to grab the cookies")
 	flag.Parse()
+
+	cookieQuery := QueryConfig{}
+	err := json.Unmarshal([]byte(*cookieRequest), &cookieQuery)
+	if err != nil {
+		panic(err)
+	}
 
 	log.Println("Cookie File: ", *cookieFile)
 	log.Println("Port: ", *proxyPort)
 	log.Println("Proxy Host: ", *proxyHost)
+	log.Println("Command Line Reuqest: ", *cookieRequest)
+	log.Println("Request URL: ", cookieQuery.Url)
 
 	cookieRefreshSeconds, err := strconv.ParseInt(*cookieRefresh, 10, 32)
 	if err != nil {
 		panic(err)
 	}
-	go cookieService(*cookieFile, int(cookieRefreshSeconds))
+	go cookieService(*cookieFile, int(cookieRefreshSeconds), &cookieQuery)
 
 	http.HandleFunc("/", hello)
 	http.HandleFunc("/p/", proxy)
@@ -70,51 +89,100 @@ func boolCheck(s string) bool {
 	return true
 }
 
-func cookieService(cookieFile string, refresh int) {
+func cookieService(cookieFile string, refresh int, cookieQuery *QueryConfig) {
 	/* periodically read the cookie file and update the local cookies */
-	if cookieFile == "" {
+	if cookieFile == "" && cookieQuery.Url == "" {
+		log.Println("No cookie file and no target URL for obtaining cookies")
 		return
 	}
 
 	for {
-		f, err := os.Open(cookieFile)
-		if err != nil {
-			log.Fatal(err)
-			return
-		}
-
-		// FIXME: there is a small chance of a race condition here
 		waitgroup.Add(1)
 		cookies = nil
-		s := bufio.NewScanner(f)
-		for s.Scan() {
-			var line = strings.TrimSpace(s.Text())
-			if strings.HasPrefix(line, "#") || len([]rune(line)) == 0 {
-				continue
-			}
-			var splits = strings.Split(s.Text(), "\t")
 
-			expiration, _ := strconv.Atoi(splits[4])
-			cookie := &http.Cookie{
-				Domain: splits[0],
-				Path:   splits[2],
-				Secure: boolCheck(splits[3]),
-				// TODO: check if this is proper way to manage this
-				MaxAge: expiration,
-				Name:   splits[5],
-				Value:  splits[6],
+		// perform an HTTP query
+		if cookieQuery != nil && cookieQuery.Url != "" {
+
+			// FIXME: this should be a flag about whether or not to allow insecure
+			// see: https://stackoverflow.com/a/12122718/57626
+			tr := &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			}
-			cookies = append(cookies, cookie)
+			client := &http.Client{Transport: tr}
+
+			resp, err := client.Post(cookieQuery.Url, "application/json", bytes.NewBufferString(cookieQuery.Body))
+			if err != nil {
+				panic(err)
+			}
+			respCookies := resp.Cookies()
+			for i := 0; i < len(respCookies); i++ {
+				cookie := respCookies[i]
+
+				// some of the cookies don't come back with a domain
+				// this should add those domains into the cookies
+				if cookie.Domain == "" {
+					u, err := url.Parse(cookieQuery.Url)
+					if err != nil {
+						panic(err)
+					}
+					cookie.Domain = u.Hostname()
+				}
+				// log.Printf("Domain: %s", cookie.Domain)
+				// log.Printf("Path: %s", cookie.Path)
+				// log.Printf("Name: %s", cookie.Name)
+				// log.Printf("Value: %s", cookie.Value)
+				// log.Printf("MaxAge: %d", cookie.MaxAge)
+				// log.Printf("Expires: %s", cookie.Expires)
+				// log.Printf("HTTP Only: %t", cookie.HttpOnly)
+				// log.Printf("Secure: %t", cookie.Secure)
+				cookies = append(cookies, respCookies[i])
+			}
+
+			if resp.StatusCode >= 400 {
+				log.Printf("WARN: Query to %s returned code %d", cookieQuery.Url,
+					resp.StatusCode)
+			}
+			resp.Body.Close()
 		}
-		log.Printf("loaded %d cookies\n", len(cookies))
+		// read in additional cookies from a cookie file
+		if cookieFile != "" {
+			f, err := os.Open(cookieFile)
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+
+			// FIXME: there is a small chance of a race condition here
+			s := bufio.NewScanner(f)
+			for s.Scan() {
+				var line = strings.TrimSpace(s.Text())
+				if strings.HasPrefix(line, "#") || len([]rune(line)) == 0 {
+					continue
+				}
+				var splits = strings.Split(s.Text(), "\t")
+
+				expiration, _ := strconv.Atoi(splits[4])
+				cookie := &http.Cookie{
+					Domain: splits[0],
+					Path:   splits[2],
+					Secure: boolCheck(splits[3]),
+					// TODO: check if this is proper way to manage this
+					MaxAge: expiration,
+					Name:   splits[5],
+					Value:  splits[6],
+				}
+				cookies = append(cookies, cookie)
+			}
+			log.Printf("loaded %d cookies\n", len(cookies))
+
+			err = s.Err()
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			f.Close()
+		}
 		waitgroup.Done()
-
-		err = s.Err()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		f.Close()
 
 		time.Sleep(time.Duration(refresh) * time.Second)
 	}
