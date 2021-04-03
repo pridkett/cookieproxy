@@ -97,8 +97,8 @@ func cookieService(cookieFile string, refresh int, cookieQuery *QueryConfig) {
 	}
 
 	for {
-		waitgroup.Add(1)
-		cookies = nil
+
+		var newCookies []*http.Cookie
 
 		// perform an HTTP query
 		if cookieQuery != nil && cookieQuery.Url != "" {
@@ -135,7 +135,7 @@ func cookieService(cookieFile string, refresh int, cookieQuery *QueryConfig) {
 				// log.Printf("Expires: %s", cookie.Expires)
 				// log.Printf("HTTP Only: %t", cookie.HttpOnly)
 				// log.Printf("Secure: %t", cookie.Secure)
-				cookies = append(cookies, respCookies[i])
+				newCookies = append(newCookies, respCookies[i])
 			}
 
 			if resp.StatusCode >= 400 {
@@ -171,9 +171,9 @@ func cookieService(cookieFile string, refresh int, cookieQuery *QueryConfig) {
 					Name:   splits[5],
 					Value:  splits[6],
 				}
-				cookies = append(cookies, cookie)
+				newCookies = append(newCookies, cookie)
 			}
-			log.Printf("loaded %d cookies\n", len(cookies))
+			log.Printf("loaded %d cookies\n", len(newCookies))
 
 			err = s.Err()
 			if err != nil {
@@ -182,6 +182,8 @@ func cookieService(cookieFile string, refresh int, cookieQuery *QueryConfig) {
 
 			f.Close()
 		}
+		waitgroup.Add(1)
+		cookies = newCookies
 		waitgroup.Done()
 
 		time.Sleep(time.Duration(refresh) * time.Second)
