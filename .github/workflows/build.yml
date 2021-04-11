@@ -1,0 +1,86 @@
+---
+# A lot of this was taken from justjanne/powerline-go
+name: CI/CD Build
+on: push
+jobs:
+  release-linux:
+    name: "Linux: Build current code"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [ 'amd64', 'arm64', 'arm' ]
+        go-version: [ '1.15', '1.16' ]
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@master
+      - name: Setup Golang
+        uses: actions/setup-go@v1
+        with:
+          go-version: ${{ matrix.go-version }}
+      - run: go build -o release/cookieproxy-$GOOS-$GOARCH
+        env:
+          CGO_ENABLED: 0
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+  release-macos:
+    name: "MacOS: Build current code"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [ 'amd64' ]
+        go-version: [ '1.15', '1.16' ]
+        # arm64 for darwin is disabled as it's not currently supported by the go
+        # compiler for our use case
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@master
+      - name: Setup Golang
+        uses: actions/setup-go@v1
+        with:
+          go-version: ${{ matrix.go-version }}
+      - run: go build -o release/cookieproxy-$GOOS-$GOARCH
+        env:
+          CGO_ENABLED: 0
+          GOOS: darwin
+          GOARCH: ${{ matrix.arch }}
+  release-windows:
+    name: "Windows: Build current code"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [ 'amd64' ]
+        go-version: [ '1.15', '1.16' ]
+        # arm64 for windows is disabled as it's not currently supported by the
+        # go compiler for our use case
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@master
+      - name: Setup Golang
+        uses: actions/setup-go@v1
+        with:
+          go-version: ${{ matrix.go-version }}
+      - run: go build -o release/cookieproxy-$GOOS-$GOARCH
+        env:
+          CGO_ENABLED: 0
+          GOOS: windows
+          GOARCH: ${{ matrix.arch }}
+  release-bsd:
+    name: "BSD: Build Current Code"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [ 'amd64' ]
+        os: [ 'freebsd', 'netbsd', 'openbsd' ]
+        go-version: [ '1.15', '1.16' ]
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@master
+      - name: Setup Golang
+        uses: actions/setup-go@v1
+        with:
+          go-version: ${{ matrix.go-version }}
+      - run: go build -o release/cookieproxy-$GOOS-$GOARCH
+        env:
+          CGO_ENABLED: 0
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
