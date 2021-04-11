@@ -1,0 +1,138 @@
+name: Release
+on:
+  release:
+    types: [created]
+jobs:
+  release-linux:
+    name: "Linux: Build release binaries"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [ 'amd64', 'arm64', 'arm' ]
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@master
+      - name: Setup Golang
+        uses: actions/setup-go@v1
+        with:
+          go-version: '1.16'
+      - run: go build -o release/cookieproxy-$GOOS-$GOARCH
+        env:
+          CGO_ENABLED: 0
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+      - name: Upload the artifacts
+        uses: skx/github-action-publish-binaries@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: 'release/cookieproxy-*'
+  release-macos:
+    name: "MacOS: Build release binaries"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [ 'amd64' ]
+        # arm64 for darwin is disabled as it's not currently supported by the go
+        # compiler for our use case
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@master
+      - name: Setup Golang
+        uses: actions/setup-go@v1
+        with:
+          go-version: '1.16'
+      - run: go build -o release/cookieproxy-$GOOS-$GOARCH
+        env:
+          CGO_ENABLED: 0
+          GOOS: darwin
+          GOARCH: ${{ matrix.arch }}
+      - name: Upload the artifacts
+        uses: skx/github-action-publish-binaries@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: 'release/cookieproxy-*'
+  release-windows:
+    name: "Windows: Build release binaries"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [ 'amd64' ]
+        # arm64 for windows is disabled as it's not currently supported by the
+        # go compiler for our use case
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@master
+      - name: Setup Golang
+        uses: actions/setup-go@v1
+        with:
+          go-version: '1.16'
+      - run: go build -o release/cookieproxy-$GOOS-$GOARCH
+        env:
+          CGO_ENABLED: 0
+          GOOS: windows
+          GOARCH: ${{ matrix.arch }}
+      - name: Upload the artifacts
+        uses: skx/github-action-publish-binaries@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: 'release/cookieproxy-*'
+  release-bsd:
+    name: "BSD: Build release binaries"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ 'freebsd', 'netbsd', 'openbsd' ]
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@master
+      - name: Setup Golang
+        uses: actions/setup-go@v1
+        with:
+          go-version: '1.16'
+      - run: go build -o release/cookieproxy-$GOOS-$GOARCH
+        env:
+          CGO_ENABLED: 0
+          GOOS: ${{ matrix.os }}
+          GOARCH: amd64
+      - name: Upload the artifacts
+        uses: skx/github-action-publish-binaries@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: 'release/cookieproxy-*'
+  docker:
+    name: "Docker: Build docker container"
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Docker meta
+        id: meta
+        uses: crazy-max/ghaction-docker-meta@v2
+        with:
+          images: name/app
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: .  
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          tags: pridkett/cookieproxy:${{ steps.meta.outputs.version }}
