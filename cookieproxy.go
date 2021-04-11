@@ -52,19 +52,26 @@ func main() {
 	proxyHost := flag.String("host", "", "host IP to listen on")
 	cookieRefresh := flag.String("refresh", "120", "number of seconds to wait between cookie updates")
 	cookieRequest := flag.String("request", "", "JSON blob describing the string to use to grab the cookies")
+	debugFlag := flag.Bool("debug", false, "Print extra debugging output")
+
 	flag.Parse()
 
 	cookieQuery := QueryConfig{}
-	err := json.Unmarshal([]byte(*cookieRequest), &cookieQuery)
-	if err != nil {
-		panic(err)
+
+	if *cookieRequest != "" {
+		err := json.Unmarshal([]byte(*cookieRequest), &cookieQuery)
+		if err != nil {
+			panic(err)
+		}
 	}
 
-	log.Println("Cookie File: ", *cookieFile)
-	log.Println("Port: ", *proxyPort)
-	log.Println("Proxy Host: ", *proxyHost)
-	log.Println("Command Line Reuqest: ", *cookieRequest)
-	log.Println("Request URL: ", cookieQuery.Url)
+	if *debugFlag {
+		log.Println("Cookie File: ", *cookieFile)
+		log.Println("Port: ", *proxyPort)
+		log.Println("Proxy Host: ", *proxyHost)
+		log.Println("Command Line Reuqest: ", *cookieRequest)
+		log.Println("Request URL: ", cookieQuery.Url)
+	}
 
 	cookieRefreshSeconds, err := strconv.ParseInt(*cookieRefresh, 10, 32)
 	if err != nil {
